@@ -1,0 +1,1979 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>GramUrja-AI - Smart Energy Management</title>
+    
+    <!-- Tailwind CSS with Forms and Container Queries -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    
+    <!-- React & Related Libraries -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/history@5/umd/history.development.js"></script>
+    <script src="https://unpkg.com/react-router@6.3.0/umd/react-router.development.js"></script>
+    <script src="https://unpkg.com/react-router-dom@6.3.0/umd/react-router-dom.development.js"></script>
+    <!-- changed: Babel 7 standalone -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#7306ef",
+                        "accent": "#7306ef",
+                        "background-light": "#f7f5f8",
+                        "background-dark": "#0f172a",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "sans": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.375rem",
+                        "md": "0.375rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        /* Hide scrollbars for cleaner prototype */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 transition-colors duration-200">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { createRoot } = ReactDOM;
+        const { MemoryRouter, Routes, Route, Link, useNavigate, useLocation, Navigate } = ReactRouterDOM;
+
+        const API_BASE = "http://127.0.0.1:8000";
+
+        // changed: safe fetch helper for Live Server/offline mode
+        const safeFetchJson = async (url, fallback = null) => {
+            try {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error("request failed");
+                return await res.json();
+            } catch (_) {
+                return fallback;
+            }
+        };
+
+        const INDIAN_STATES = [
+            "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal", "Delhi", "Jammu and Kashmir", "Ladakh", "Puducherry"
+        ];
+        const ONBOARD_APPLIANCES = ["AC", "Fan", "Light", "Washing Machine"];
+        const SCHEDULE_USER_TO_BACKEND_NAME = { AC: ["Air Conditioner"], "Washing Machine": ["Washing Machine"], Fan: ["Fan"], Light: ["Light"] };
+
+        // --- Common Components & Auth ---
+
+        const ThemeToggle = () => {
+            const [dark, setDark] = useState(false);
+            const toggle = () => {
+                const isDark = !dark;
+                setDark(isDark);
+                document.documentElement.classList.toggle('dark', isDark);
+            };
+            return (
+                <button onClick={toggle} className="p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors flex items-center justify-center">
+                    <span className="material-symbols-outlined">{dark ? 'light_mode' : 'dark_mode'}</span>
+                </button>
+            );
+        };
+
+        const ProtectedRoute = ({ element }) => {
+            const isAuthed = typeof window !== "undefined" && localStorage.getItem("auth") === "true";
+            return isAuthed ? element : <Navigate to="/login" replace />;
+        };
+
+        const LoginPage = () => {
+            const navigate = useNavigate();
+            const [email, setEmail] = useState("");
+            const [password, setPassword] = useState("");
+            const [error, setError] = useState("");
+            const [loading, setLoading] = useState(false);
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                setError("");
+                setLoading(true);
+                setTimeout(() => {
+                    const ok = email.includes("@") && password.length >= 4;
+                    if (ok) {
+                        localStorage.setItem("auth", "true");
+                        setLoading(false);
+                        navigate("/", { replace: true });
+                    } else {
+                        setLoading(false);
+                        setError("Invalid email or password. Please try again.");
+                    }
+                }, 700);
+            };
+
+            return (
+                <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 px-4">
+                    <div class="relative max-w-md w-full">
+                        <div class="absolute -inset-[1px] bg-gradient-to-r from-primary to-cyan-400 opacity-60 blur-lg rounded-3xl"></div>
+                        <div class="relative bg-white/10 dark:bg-slate-900/60 backdrop-blur-2xl border border-white/20 rounded-3xl shadow-2xl p-8 space-y-6">
+                            <div class="text-center space-y-2">
+                                <h1 class="text-3xl font-extrabold tracking-tight text-white">GramUrja-AI</h1>
+                                <p class="text-slate-200 text-sm">Smart Energy Intelligence Platform</p>
+                            </div>
+                            <form class="space-y-4" onSubmit={handleSubmit}>
+                                <div class="space-y-1.5">
+                                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-200">Email</label>
+                                    <input
+                                        type="email"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        class="w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2.5 text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                        placeholder="you@example.com"
+                                        required
+                                    />
+                                </div>
+                                <div class="space-y-1.5">
+                                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-200">Password</label>
+                                    <input
+                                        type="password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        class="w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2.5 text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                        placeholder="••••••••"
+                                        required
+                                    />
+                                </div>
+                                {error && (
+                                    <p class="text-xs text-red-300 bg-red-900/40 border border-red-500/40 rounded-lg px-3 py-2">
+                                        {error}
+                                    </p>
+                                )}
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    class="w-full inline-flex items-center justify-center rounded-xl bg-primary text-white text-sm font-semibold py-2.5 mt-2 shadow-lg shadow-primary/30 hover:bg-primary/90 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    {loading ? "Signing in..." : "Login"}
+                                </button>
+                            </form>
+                            <p class="text-[11px] text-slate-300/90 text-center">
+                                Demo login accepts any email and password with at least 4 characters.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const Header = () => {
+            const navigate = useNavigate();
+            const [notifications, setNotifications] = useState([]);
+            const [hasNew, setHasNew] = useState(false);
+            const [open, setOpen] = useState(false);
+            const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+            useEffect(() => {
+                let cancelled = false;
+                const fetchRecommendation = () => {
+                    fetch(`${API_BASE}/ai-recommendation`)
+                        .then((r) => r.json())
+                        .then((data) => {
+                            if (cancelled) return;
+                            if (data && data.id) {
+                                const idStr = String(data.id);
+                                const lastId = localStorage.getItem("lastAiRecId");
+                                if (data.alert && idStr !== lastId) {
+                                    const notif = {
+                                        id: data.id,
+                                        device: data.device,
+                                        reason: data.reason,
+                                        estimated_savings: data.estimated_savings,
+                                        action: data.action,
+                                        timestamp: new Date().toLocaleTimeString(),
+                                    };
+                                    setNotifications((prev) => [notif, ...prev].slice(0, 5));
+                                    setHasNew(true);
+                                    localStorage.setItem("lastAiRecId", idStr);
+                                }
+                            }
+                        })
+                        .catch(() => {});
+                };
+                fetchRecommendation();
+                const interval = setInterval(fetchRecommendation, 60000);
+                return () => {
+                    cancelled = true;
+                    clearInterval(interval);
+                };
+            }, []);
+
+            const handleLogout = () => {
+                localStorage.removeItem("auth");
+                navigate("/login", { replace: true });
+            };
+
+            const goToScheduling = () => {
+                setOpen(false);
+                navigate("/scheduling");
+            };
+
+            return (
+                <header className="sticky top-0 z-50 w-full border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md px-6 lg:px-10 py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-primary p-1.5 rounded-lg flex items-center justify-center text-white">
+                            <span className="material-symbols-outlined text-2xl">bolt</span>
+                        </div>
+                        <h2 className="text-slate-900 dark:text-white text-xl font-bold tracking-tight">GramUrja-AI</h2>
+                    </div>
+                    <div className="flex items-center gap-4 lg:gap-6">
+                        <div className="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-full px-3 py-1">
+                            <span className="material-symbols-outlined text-sm text-green-500">check_circle</span>
+                            <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">System Online</span>
+                        </div>
+                        <div className="flex items-center gap-2 relative">
+                            <ThemeToggle />
+                            <div className="relative">
+                                <button
+                                    className="relative p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+                                    onClick={() => {
+                                        setOpen((o) => !o);
+                                        setHasNew(false);
+                                    }}
+                                >
+                                    <span className="material-symbols-outlined">notifications</span>
+                                    {hasNew && (
+                                        <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-red-500 border border-white"></span>
+                                    )}
+                                </button>
+                                {open && (
+                                    <div className="absolute right-0 mt-2 w-80 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl z-20">
+                                        <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                                            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                                                AI Recommendations
+                                            </p>
+                                            {notifications.length > 0 && (
+                                                <span className="text-[10px] text-slate-400">
+                                                    {notifications.length} new
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="max-h-64 overflow-y-auto">
+                                            {notifications.length === 0 ? (
+                                                <div className="px-4 py-6 text-xs text-slate-500 dark:text-slate-400 text-center">
+                                                    No new recommendations.
+                                                </div>
+                                            ) : (
+                                                notifications.map((n) => (
+                                                    <div key={n.id} className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 last:border-b-0">
+                                                        <p className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-1">
+                                                            <span className="material-symbols-outlined text-xs text-amber-500">bolt</span>
+                                                            Device: {n.device}
+                                                        </p>
+                                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                                            {n.reason}
+                                                        </p>
+                                                        <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 font-semibold">
+                                                            Estimated savings: {n.estimated_savings}
+                                                        </p>
+                                                        <div className="mt-2 flex items-center justify-between">
+                                                            <span className="text-[10px] text-slate-400">{n.timestamp}</span>
+                                                            <button
+                                                                onClick={goToScheduling}
+                                                                className="text-[11px] font-semibold text-primary hover:underline"
+                                                            >
+                                                                View Details
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            <Link to="/settings" className="p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+                                <span className="material-symbols-outlined">settings</span>
+                            </Link>
+                            <div className="h-8 w-px bg-slate-200 dark:bg-slate-800 mx-2"></div>
+                            <div className="relative flex items-center gap-3 pl-2">
+                                <div className="text-right hidden sm:block">
+                                    <p className="text-sm font-semibold text-slate-900 dark:text-white leading-none">Avinash</p>
+                                    <p className="text-[11px] text-slate-500 font-medium">Home Pro Plan</p>
+                                </div>
+                                <button
+                                    onClick={() => setShowProfileMenu((v) => !v)}
+                                    className="h-10 w-10 rounded-full bg-slate-200 border-2 border-white shadow-sm overflow-hidden bg-cover bg-center focus:outline-none focus:ring-2 focus:ring-primary"
+                                    style={{backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuD-WxgsuWPBjP0OP1xPeBftqYVS66rEp8xTB29WpwPzWvxYjcsALZWkeHWIqMYDnUY812qlFqBAMr8adRRKsYa67ljK9TrO-iB3lLHlSzqCv8ofNqAstmITJjCpdaMpeLbeBSxm5ZdHj026qjrfbMl5F1w6YXMyQbeSwfU80M38CqneVT-JSLySMmXaTibN6FzJhz5A5oz7E-30tuqLyZpZDZHwf6Dlq6_KatwLlKM4CysS2JKmLgeE6bCv3EENwjqvL719iKwxjD6A')"}}
+                                >
+                                </button>
+                                {showProfileMenu && (
+                                    <div className="absolute right-0 top-12 w-40 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg z-20">
+                                        <button
+                                            onClick={handleLogout}
+                                            className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-t-xl"
+                                        >
+                                            Logout
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </header>
+            );
+        };
+
+        const Sidebar = () => {
+            const location = useLocation();
+            const navItems = [
+                { path: "/", icon: "dashboard", label: "Overview" },
+                { path: "/analytics", icon: "analytics", label: "Analytics" },
+                { path: "/forecast", icon: "show_chart", label: "AI Forecast" },
+                { path: "/scheduling", icon: "calendar_today", label: "Scheduling" },
+                { path: "/tariffs", icon: "payments", label: "Tariffs" },
+                { path: "/assistant", icon: "mic", label: "Assistant" },
+                { path: "/onboarding", icon: "info", label: "Guide" },
+            ];
+
+            return (
+                <aside class="w-full lg:w-64 flex flex-col gap-1">
+                    {navItems.map(item => (
+                        <Link 
+                            key={item.path}
+                            to={item.path} 
+                            class={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${location.pathname === item.path ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium'}`}
+                        >
+                            <span class="material-symbols-outlined">{item.icon}</span>
+                            <span>{item.label}</span>
+                        </Link>
+                    ))}
+                    <div class="mt-8 px-4">
+                        <div class="rounded-xl p-4 border border-primary/20 dark:bg-slate-800/50">
+                            <p class="text-primary text-xs font-bold uppercase tracking-widest mb-1">Efficiency Tip</p>
+                            <p class="text-slate-700 dark:text-slate-300 text-sm">Schedule laundry for 1 PM to maximize solar utilization.</p>
+                        </div>
+                    </div>
+                </aside>
+            );
+        };
+
+        const ProfileBootstrap = ({ children }) => {
+            const location = useLocation();
+            const navigate = useNavigate();
+            useEffect(() => {
+                const isLogin = location.pathname === "/login";
+                const authed = localStorage.getItem("auth") === "true";
+                if (isLogin || !authed) return;
+                let cancelled = false;
+
+                // changed: do not force redirect to /setup when backend is unreachable
+                safeFetchJson(`${API_BASE}/user/profile`, null).then((profile) => {
+                    if (cancelled) return;
+                    const localComplete = localStorage.getItem("onboardingComplete") === "true";
+                    const remoteComplete = profile && profile.state && String(profile.state).trim() !== "";
+                    const complete = localComplete || remoteComplete;
+
+                    if (!complete && location.pathname !== "/setup") navigate("/setup", { replace: true });
+                    if (complete && location.pathname === "/setup") navigate("/", { replace: true });
+                });
+
+                return () => { cancelled = true; };
+            }, [location.pathname, navigate]);
+            return children;
+        };
+
+        const OnboardingPage = () => {
+            const navigate = useNavigate();
+            const [step, setStep] = useState(1);
+            const [formData, setFormData] = useState({
+                state: "",
+                language: "en",
+                house: { type: "", rooms: "", people: "" },
+                appliances: [],
+                applianceDetails: [],
+                bill: "",
+                solar: { hasSolar: false, capacity: "", netMetering: false },
+                usagePattern: "",
+                goal: ""
+            });
+            const [submitting, setSubmitting] = useState(false);
+            const [error, setError] = useState("");
+            const stepTitles = ["Basic Info", "House Details", "Appliances", "Energy & Solar", "Preferences"];
+            const HOUSE_TYPES = ["Apartment", "Independent", "Hostel"];
+            const USAGE_PATTERNS = ["Morning", "Day", "Evening", "Night"];
+            const GOALS = ["Reduce Bill", "Maximize Solar", "Comfort", "Eco-friendly"];
+
+            const syncAppliancesFromDetails = (details) => details.map((d) => d.name);
+
+            const toggleAppliance = (name) => {
+                setFormData((prev) => {
+                    const has = prev.applianceDetails.some((a) => a.name === name);
+                    let applianceDetails;
+                    if (has) {
+                        applianceDetails = prev.applianceDetails.filter((a) => a.name !== name);
+                    } else {
+                        applianceDetails = [...prev.applianceDetails, { name: name, count: 1, hours: 4 }];
+                    }
+                    return { ...prev, applianceDetails, appliances: syncAppliancesFromDetails(applianceDetails) };
+                });
+            };
+
+            const updateApplianceDetail = (name, field, raw) => {
+                const numVal = field !== "name" ? Math.max(0, parseFloat(raw) || 0) : raw;
+                setFormData((prev) => {
+                    const applianceDetails = prev.applianceDetails.map((a) =>
+                        a.name === name ? { ...a, [field]: field === "count" || field === "hours" ? numVal : a[field] } : a
+                    );
+                    return { ...prev, applianceDetails, appliances: syncAppliancesFromDetails(applianceDetails) };
+                });
+            };
+
+            const validateStep = (s) => {
+                setError("");
+                if (s === 1) {
+                    if (!formData.state) return "Please select your state.";
+                    if (!formData.language) return "Please select a language.";
+                }
+                if (s === 2) {
+                    if (!formData.house.type) return "Please select house type.";
+                    const rooms = String(formData.house.rooms).trim();
+                    const people = String(formData.house.people).trim();
+                    if (!rooms || Number(rooms) < 1) return "Enter a valid number of rooms (1+).";
+                    if (!people || Number(people) < 1) return "Enter a valid number of people (1+).";
+                }
+                if (s === 3) {
+                    if (!formData.applianceDetails.length) return "Select at least one appliance.";
+                    for (const a of formData.applianceDetails) {
+                        if (!a.count || a.count < 1) return `Set a valid count for ${a.name}.`;
+                        if (a.hours === "" || a.hours < 0 || a.hours > 24) return `Set usage hours (0–24) for ${a.name}.`;
+                    }
+                }
+                if (s === 4) {
+                    const bill = String(formData.bill).trim();
+                    if (!bill || Number(bill) < 0) return "Enter a valid monthly electricity bill (₹).";
+                    if (formData.solar.hasSolar) {
+                        const cap = String(formData.solar.capacity).trim();
+                        if (!cap || Number(cap) <= 0) return "Enter solar capacity (kW) or turn off solar.";
+                    }
+                }
+                if (s === 5) {
+                    if (!formData.usagePattern) return "Select your usage pattern.";
+                    if (!formData.goal) return "Select your primary goal.";
+                }
+                return "";
+            };
+
+            const goNext = () => {
+                const err = validateStep(step);
+                if (err) {
+                    setError(err);
+                    return;
+                }
+                setError("");
+                if (step < 5) setStep((x) => x + 1);
+            };
+
+            const goBack = () => {
+                setError("");
+                if (step > 1) setStep((x) => x - 1);
+            };
+
+            const handleFinalSubmit = (e) => {
+                e.preventDefault();
+                const err = validateStep(5);
+                if (err) {
+                    setError(err);
+                    return;
+                }
+                setError("");
+                setSubmitting(true);
+
+                // changed: local completion fallback if backend is unavailable
+                fetch(`${API_BASE}/user/onboard`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(formData)
+                })
+                    .then((r) => {
+                        if (!r.ok) throw new Error("save failed");
+                        return r.json();
+                    })
+                    .then(() => {
+                        localStorage.setItem("onboardingComplete", "true");
+                        navigate("/", { replace: true });
+                    })
+                    .catch(() => {
+                        localStorage.setItem("onboardingComplete", "true");
+                        navigate("/", { replace: true });
+                    })
+                    .finally(() => setSubmitting(false));
+            };
+
+            const progressPct = (step / 5) * 100;
+            const inputClass = "w-full rounded-xl border border-white/20 bg-white/10 backdrop-blur-sm px-3 py-2.5 text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary";
+            const labelClass = "block text-xs font-semibold uppercase tracking-wider text-blackß dark:text-white";
+
+            return (
+                <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 px-4 py-12">
+                    <div class="relative max-w-lg w-full">
+                        <div class="absolute -inset-[1px] bg-gradient-to-r from-primary to-cyan-400 opacity-50 blur-lg rounded-3xl"></div>
+                        <div class="relative backdrop-blur-xl bg-white/10 dark:bg-slate-900/40 border border-white/20 rounded-3xl shadow-2xl p-8 space-y-6 transition-all duration-300">
+                            <div class="text-center space-y-2">
+                                <h1 class="text-2xl font-extrabold tracking-tight text-white">Welcome to Eco_Smart AI</h1>
+                                <p class="text-slate-200/90 text-sm">GramUrja-AI — tune your home profile in a few steps.</p>
+                                <p class="text-cyan-200/90 text-xs font-semibold">Step {step} of 5 · {stepTitles[step - 1]}</p>
+                            </div>
+                            <div class="h-2 rounded-full bg-white/10 overflow-hidden border border-white/10">
+                                <div
+                                    class="h-full rounded-full bg-gradient-to-r from-primary to-cyan-400 transition-all duration-500 ease-out"
+                                    style={{ width: progressPct + "%" }}
+                                />
+                            </div>
+                            <form class="space-y-5" onSubmit={step === 5 ? handleFinalSubmit : (ev) => ev.preventDefault()}>
+                                <div key={step} class="space-y-5 min-h-[280px] transition-opacity duration-300">
+                                    {step === 1 && (
+                                        <>
+                                            <div class="space-y-1.5">
+                                                <label class={labelClass}>State</label>
+                                                <select
+                                                    value={formData.state}
+                                                    onChange={(e) => setFormData((p) => ({ ...p, state: e.target.value }))}
+                                                    class={inputClass}
+                                                >
+                                                    <option value="">Select state</option>
+                                                    {INDIAN_STATES.map((s) => (
+                                                        <option key={s} value={s}>{s}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div class="space-y-1.5">
+                                                <label class={labelClass}>Language</label>
+                                                <select
+                                                    value={formData.language}
+                                                    onChange={(e) => setFormData((p) => ({ ...p, language: e.target.value }))}
+                                                    class={inputClass}
+                                                >
+                                                    <option value="en">English</option>
+                                                    <option value="hi">Hindi</option>
+                                                    <option value="bn">Bengali</option>
+                                                    <option value="mr">Marathi</option>
+                                                    <option value="te">Telugu</option>
+                                                    <option value="ta">Tamil</option>
+                                                    <option value="gu">Gujarati</option>
+                                                    <option value="ur">Urdu</option>
+                                                    <option value="kn">Kannada</option>
+                                                    <option value="or">Odia</option>
+                                                    <option value="pa">Punjabi</option>
+                                                </select>
+                                            </div>
+                                        </>
+                                    )}
+                                    {step === 2 && (
+                                        <>
+                                            <div class="space-y-1.5">
+                                                <label class={labelClass}>House type</label>
+                                                <select
+                                                    value={formData.house.type}
+                                                    onChange={(e) => setFormData((p) => ({ ...p, house: { ...p.house, type: e.target.value } }))}
+                                                    class={inputClass}
+                                                >
+                                                    <option value="">Select type</option>
+                                                    {HOUSE_TYPES.map((t) => (
+                                                        <option key={t} value={t}>{t}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div class="space-y-1.5">
+                                                <label class={labelClass}>Number of rooms</label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={formData.house.rooms}
+                                                    onChange={(e) => setFormData((p) => ({ ...p, house: { ...p.house, rooms: e.target.value } }))}
+                                                    class={inputClass}
+                                                    placeholder="e.g. 3"
+                                                />
+                                            </div>
+                                            <div class="space-y-1.5">
+                                                <label class={labelClass}>Number of people</label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={formData.house.people}
+                                                    onChange={(e) => setFormData((p) => ({ ...p, house: { ...p.house, people: e.target.value } }))}
+                                                    class={inputClass}
+                                                    placeholder="e.g. 4"
+                                                />
+                                            </div>
+                                        </>
+                                    )}
+                                    {step === 3 && (
+                                        <>
+                                            <div class="space-y-2">
+                                                <label class={labelClass}>Appliances you use</label>
+                                                <div class="flex flex-wrap gap-2">
+                                                    {ONBOARD_APPLIANCES.map((name) => (
+                                                        <button
+                                                            key={name}
+                                                            type="button"
+                                                            onClick={() => toggleAppliance(name)}
+                                                            class={"px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors backdrop-blur-sm " + (formData.applianceDetails.some((a) => a.name === name)
+                                                                ? "bg-primary text-white border-primary/80"
+                                                                : "bg-white/10 text-slate-100 border-white/20 hover:bg-white/15")}
+                                                        >
+                                                            {name}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            {formData.applianceDetails.length > 0 && (
+                                                <div class="space-y-3 rounded-2xl border border-white/15 bg-white/5 p-4 backdrop-blur-md">
+                                                    {formData.applianceDetails.map((a) => (
+                                                        <div key={a.name} class="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end border-b border-white/10 pb-3 last:border-0 last:pb-0">
+                                                            <span class="text-sm font-semibold text-white">{a.name}</span>
+                                                            <div>
+                                                                <label class="text-[10px] uppercase text-slate-400">Count</label>
+                                                                <input
+                                                                    type="number"
+                                                                    min="1"
+                                                                    value={a.count}
+                                                                    onChange={(e) => updateApplianceDetail(a.name, "count", e.target.value)}
+                                                                    class={inputClass + " py-2"}
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label class="text-[10px] uppercase text-slate-400">Hours / day</label>
+                                                                <input
+                                                                    type="number"
+                                                                    min="0"
+                                                                    max="24"
+                                                                    step="0.5"
+                                                                    value={a.hours}
+                                                                    onChange={(e) => updateApplianceDetail(a.name, "hours", e.target.value)}
+                                                                    class={inputClass + " py-2"}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                    {step === 4 && (
+                                        <>
+                                            <div class="space-y-1.5">
+                                                <label class={labelClass}>Monthly electricity bill (₹)</label>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="1"
+                                                    value={formData.bill}
+                                                    onChange={(e) => setFormData((p) => ({ ...p, bill: e.target.value }))}
+                                                    class={inputClass}
+                                                    placeholder="e.g. 3500"
+                                                />
+                                            </div>
+                                            <div class="flex items-center justify-between gap-4 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 backdrop-blur-md">
+                                                <span class="text-sm font-medium text-white">Do you have solar?</span>
+                                                <div class="flex rounded-lg border border-white/20 overflow-hidden">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormData((p) => ({ ...p, solar: { ...p.solar, hasSolar: false, capacity: "", netMetering: false } }))}
+                                                        class={"px-3 py-1.5 text-xs font-semibold " + (!formData.solar.hasSolar ? "bg-primary text-white" : "text-slate-200")}
+                                                    >
+                                                        No
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormData((p) => ({ ...p, solar: { ...p.solar, hasSolar: true } }))}
+                                                        class={"px-3 py-1.5 text-xs font-semibold " + (formData.solar.hasSolar ? "bg-primary text-white" : "text-slate-200")}
+                                                    >
+                                                        Yes
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            {formData.solar.hasSolar && (
+                                                <div class="space-y-3 rounded-2xl border border-white/15 bg-white/5 p-4 backdrop-blur-md transition-all duration-300">
+                                                    <div class="space-y-1.5">
+                                                        <label class={labelClass}>Solar capacity (kW)</label>
+                                                        <input
+                                                            type="number"
+                                                            min="0.1"
+                                                            step="0.1"
+                                                            value={formData.solar.capacity}
+                                                            onChange={(e) => setFormData((p) => ({ ...p, solar: { ...p.solar, capacity: e.target.value } }))}
+                                                            class={inputClass}
+                                                            placeholder="e.g. 5"
+                                                        />
+                                                    </div>
+                                                    <div class="flex items-center justify-between gap-4">
+                                                        <span class="text-sm text-slate-200">Net metering?</span>
+                                                        <div class="flex rounded-lg border border-white/20 overflow-hidden">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setFormData((p) => ({ ...p, solar: { ...p.solar, netMetering: false } }))}
+                                                                class={"px-3 py-1.5 text-xs font-semibold " + (!formData.solar.netMetering ? "bg-primary text-white" : "text-slate-200")}
+                                                            >
+                                                                No
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setFormData((p) => ({ ...p, solar: { ...p.solar, netMetering: true } }))}
+                                                                class={"px-3 py-1.5 text-xs font-semibold " + (formData.solar.netMetering ? "bg-primary text-white" : "text-slate-200")}
+                                                            >
+                                                                Yes
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                    {step === 5 && (
+                                        <>
+                                            <div class="space-y-1.5">
+                                                <label class={labelClass}>Usage pattern</label>
+                                                <select
+                                                    value={formData.usagePattern}
+                                                    onChange={(e) => setFormData((p) => ({ ...p, usagePattern: e.target.value }))}
+                                                    class={inputClass}
+                                                >
+                                                    <option value="">Select pattern</option>
+                                                    {USAGE_PATTERNS.map((u) => (
+                                                        <option key={u} value={u}>{u}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div class="space-y-1.5">
+                                                <label class={labelClass}>Primary goal</label>
+                                                <select
+                                                    value={formData.goal}
+                                                    onChange={(e) => setFormData((p) => ({ ...p, goal: e.target.value }))}
+                                                    class={inputClass}
+                                                >
+                                                    <option value="">Select goal</option>
+                                                    {GOALS.map((g) => (
+                                                        <option key={g} value={g}>{g}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                                {error && (
+                                    <p class="text-xs text-red-200 bg-red-900/30 border border-red-400/30 rounded-lg px-3 py-2">{error}</p>
+                                )}
+                                <div class="flex gap-3 pt-2">
+                                    <button
+                                        type="button"
+                                        onClick={goBack}
+                                        disabled={step === 1 || submitting}
+                                        class="flex-1 rounded-xl border border-white/25 bg-white/5 backdrop-blur-sm text-sm font-semibold py-2.5 text-white hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                        Back
+                                    </button>
+                                    {step < 5 ? (
+                                        <button
+                                            type="button"
+                                            onClick={goNext}
+                                            class="flex-1 rounded-xl bg-primary text-white text-sm font-semibold py-2.5 shadow-lg shadow-primary/30 hover:bg-primary/90 transition-colors"
+                                        >
+                                            Next
+                                        </button>
+                                    ) : (
+                                        <button
+                                            type="submit"
+                                            disabled={submitting}
+                                            class="flex-1 rounded-xl bg-primary text-white text-sm font-semibold py-2.5 shadow-lg shadow-primary/30 hover:bg-primary/90 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
+                                        >
+                                            {submitting ? "Saving…" : "Finish"}
+                                        </button>
+                                    )}
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Onboarding Guide ---
+
+const OnboardingGuide = () => {
+    const navigate = useNavigate();
+
+    const howItWorks = [
+        { icon: "sensors", title: "Connect Your Energy Source", desc: "Link your smart meter, solar panels, or IoT devices to the platform." },
+        { icon: "analytics", title: "Real-Time Tracking", desc: "System monitors your energy consumption and generation live." },
+        { icon: "auto_awesome", title: "AI Predicts & Optimizes", desc: "Advanced algorithms forecast demand and suggest optimal schedules." },
+        { icon: "trending_down", title: "Save Costs & Energy", desc: "Get personalized recommendations to reduce bills and carbon footprint." },
+    ];
+
+    const setupSteps = [
+        { num: "1", title: "Prepare Energy Data Source", desc: "Ensure your smart meter or solar system is connected. (Simulated data available for demo.)" },
+        { num: "2", title: "Start Backend Server", desc: `Run the FastAPI backend at ${API_BASE} for AI services.` },
+        { num: "3", title: "Access Dashboard", desc: "Open this frontend and log in to view live energy data." },
+        { num: "4", title: "Explore Features", desc: "Navigate through Analytics, Forecast, and Scheduling to optimize your setup." },
+    ];
+
+    const keyFeatures = [
+        { icon: "flash_on", title: "Live Monitoring", desc: "Real-time visibility into solar generation and consumption." },
+        { icon: "show_chart", title: "AI Forecasting", desc: "24-hour demand and generation predictions." },
+        { icon: "event_note", title: "Smart Scheduling", desc: "Automated appliance scheduling for maximum savings." },
+        { icon: "smart_toy", title: "AI Assistant", desc: "Voice-enabled assistant for multilingual support (11 languages)." },
+    ];
+
+    const tips = [
+        { icon: "light_mode", title: "Use Solar Peak Hours", desc: "Run high-energy appliances between 10 AM–3 PM when solar generation peaks." },
+        { icon: "schedule", title: "Avoid Peak Tariff Times", desc: "Check tariffs and schedule non-urgent loads during off-peak hours." },
+        { icon: "lightbulb", title: "Check AI Recommendations", desc: "Review daily AI suggestions for appliance scheduling and energy optimization." },
+    ];
+
+    return (
+        <div class="flex-1 space-y-12 pb-12 bg-white min-h-screen">
+            
+            {/* Hero Section */}
+            <div class="relative rounded-3xl overflow-hidden border border-primary/20">
+                <div class="absolute inset-0 bg-gradient-to-r from-primary/30 via-cyan-400/20 to-primary/20 opacity-60"></div>
+                <div class="relative px-8 lg:px-12 py-16 lg:py-20 text-center space-y-4">
+                    <h1 class="text-4xl lg:text-5xl font-black tracking-tight text-slate-900">Welcome to Eco_Smart AI</h1>
+                    <p class="text-xl text-slate-800">Optimize your energy usage with AI-powered insights</p>
+                    <p class="text-slate-700 max-w-2xl mx-auto text-base">
+                        A comprehensive platform designed to help you monitor, forecast, and optimize your energy consumption in real-time. Make smarter decisions, reduce costs, and contribute to a sustainable future.
+                    </p>
+                </div>
+            </div>
+
+            {/* How It Works */}
+            <div class="space-y-8">
+                <div>
+                    <h2 class="text-3xl font-black text-slate-900">How It Works</h2>
+                    <p class="text-slate-500 mt-2">Get started in 4 simple steps</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                    {howItWorks.map((item, idx) => (
+                        <div key={idx} class="bg-white rounded-2xl p-6 border shadow-sm">
+                            <div class="h-12 w-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-4">
+                                <span class="material-symbols-outlined text-2xl">{item.icon}</span>
+                            </div>
+                            <h3 class="font-bold text-slate-900 text-lg mb-2">{item.title}</h3>
+                            <p class="text-slate-600 text-sm">{item.desc}</p>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Setup Guide */}
+            <div class="space-y-8">
+                <div>
+                    <h2 class="text-3xl font-black text-slate-900">Setup Guide</h2>
+                </div>
+
+                <div class="space-y-4">
+                    {setupSteps.map((step, idx) => (
+                        <div key={idx} class="flex gap-6 items-start">
+                            <div class="h-10 w-10 rounded-full bg-primary text-white flex items-center justify-center font-bold">
+                                {step.num}
+                            </div>
+
+                            <div class="flex-1 bg-white rounded-2xl p-5 border shadow-sm">
+                                <h3 class="font-bold text-slate-900">{step.title}</h3>
+                                <p class="text-slate-600 text-sm mt-2">{step.desc}</p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Features */}
+            <div class="space-y-8">
+                <h2 class="text-3xl font-black text-slate-900">Key Features</h2>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                    {keyFeatures.map((feature, idx) => (
+                        <div key={idx} class="bg-white rounded-2xl p-6 border shadow-sm">
+                            <div class="h-14 w-14 rounded-xl bg-primary/15 text-primary flex items-center justify-center mb-4">
+                                <span class="material-symbols-outlined text-3xl">{feature.icon}</span>
+                            </div>
+                            <h3 class="font-bold text-slate-900">{feature.title}</h3>
+                            <p class="text-slate-600 text-sm">{feature.desc}</p>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Tips */}
+            <div class="space-y-8">
+                <h2 class="text-3xl font-black text-slate-900">Tips</h2>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {tips.map((tip, idx) => (
+                        <div key={idx} class="bg-white rounded-2xl p-6 border shadow-sm">
+                            <h3 class="font-bold text-slate-900">{tip.title}</h3>
+                            <p class="text-slate-600 text-sm">{tip.desc}</p>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* CTA */}
+            <div class="p-8 text-center">
+                <button 
+                    onClick={() => navigate("/")}
+                    class="px-8 py-3 rounded-xl bg-primary text-white font-bold"
+                >
+                    Go to Dashboard
+                </button>
+            </div>
+
+        </div>
+    );
+};
+        // --- Screens ---
+
+        const DashboardOverview = () => {
+
+        const [energy,setEnergy] = React.useState(null);
+        const [activeTab, setActiveTab] = React.useState("live");
+        const [deviceModes, setDeviceModes] = React.useState({});
+        const [openMenuId, setOpenMenuId] = React.useState(null);
+
+        // Fake historical + device data for prototype
+        const historicalAppliances = [
+            { name: "Air Conditioner", kwh: 185, cost: 62.9 },
+            { name: "Smart Fridge", kwh: 92, cost: 31.3 },
+            { name: "Washing Machine", kwh: 64, cost: 21.8 },
+            { name: "Dishwasher", kwh: 42, cost: 14.3 },
+            { name: "Water Heater", kwh: 55, cost: 18.7 },
+        ];
+
+        const deviceList = [
+            { name: "Air Conditioner (Living Room)", power: "2.5 kW", status: "ON" },
+            { name: "Smart Fridge", power: "0.18 kW", status: "ON" },
+            { name: "Washing Machine", power: "2.0 kW", status: "OFF" },
+            { name: "Dishwasher", power: "1.2 kW", status: "OFF" },
+            { name: "Water Heater", power: "3.0 kW", status: "ON" },
+            { name: "EV Charger", power: "7.0 kW", status: "OFF" },
+        ];
+
+        React.useEffect(() => {
+            safeFetchJson(`${API_BASE}/energy/live`, {
+                solar_generation_kw: 3.8,
+                home_consumption_kw: 2.9,
+                grid_export_kw: 0.9,
+                battery_percent: 74
+            }).then(setEnergy);
+        }, []);
+
+        const totalKwh = historicalAppliances.reduce((sum, a) => sum + a.kwh, 0);
+        const totalCost = historicalAppliances.reduce((sum, a) => sum + a.cost, 0);
+
+        const handleModeChange = (deviceIndex, newMode) => {
+            setDeviceModes(prev => ({
+                ...prev,
+                [deviceIndex]: newMode
+            }));
+            setOpenMenuId(null);
+        };
+
+        const getDeviceMode = (deviceIndex) => {
+            return deviceModes[deviceIndex] || "Semi-Automatic";
+        };
+
+        return (
+        <div class="flex-1 space-y-8">
+
+        <div class="flex overflow-x-auto pb-2 gap-4 border-b border-slate-200 dark:border-slate-800">
+        <button onClick={() => setActiveTab("live")} class={`whitespace-nowrap pb-4 px-2 text-sm font-bold border-b-2 ${activeTab === "live" ? "border-primary text-slate-900 dark:text-white" : "border-transparent text-slate-400 hover:text-slate-600"} transition-colors`}>LIVE MONITOR</button>
+        <button onClick={() => setActiveTab("historical")} class={`whitespace-nowrap pb-4 px-2 text-sm font-bold border-b-2 ${activeTab === "historical" ? "border-primary text-slate-900 dark:text-white" : "border-transparent text-slate-400 hover:text-slate-600"} transition-colors`}>HISTORICAL</button>
+        <button onClick={() => setActiveTab("devices")} class={`whitespace-nowrap pb-4 px-2 text-sm font-bold border-b-2 ${activeTab === "devices" ? "border-primary text-slate-900 dark:text-white" : "border-transparent text-slate-400 hover:text-slate-600"} transition-colors`}>DEVICES</button>
+        </div>
+
+        {activeTab === "live" && (
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+
+        <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-shadow">
+        <div class="flex justify-between items-start mb-4">
+        <div class="p-2 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 rounded-lg">
+        <span class="material-symbols-outlined">light_mode</span>
+        </div>
+        <span class="text-green-500 text-xs font-bold flex items-center bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-full">+12.4%</span>
+        </div>
+        <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Solar Generation</p>
+        <div class="flex items-baseline gap-1 mt-1">
+        <h3 class="text-2xl font-bold text-slate-900 dark:text-white">
+        {energy ? energy.solar_generation_kw : "--"}
+        </h3>
+        <span class="text-slate-400 font-medium">kW</span>
+        </div>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-shadow">
+        <div class="flex justify-between items-start mb-4">
+        <div class="p-2 bg-primary/10 text-primary rounded-lg">
+        <span class="material-symbols-outlined">home</span>
+        </div>
+        <span class="text-red-500 text-xs font-bold flex items-center bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded-full">-3.1%</span>
+        </div>
+        <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Home Consumption</p>
+        <div class="flex items-baseline gap-1 mt-1">
+        <h3 class="text-2xl font-bold text-slate-900 dark:text-white">
+        {energy ? energy.home_consumption_kw : "--"}
+        </h3>
+        <span class="text-slate-400 font-medium">kW</span>
+        </div>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-shadow">
+        <div class="flex justify-between items-start mb-4">
+        <div class="p-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg">
+        <span class="material-symbols-outlined">electrical_services</span>
+        </div>
+        <span class="text-slate-500 text-xs font-bold flex items-center bg-slate-50 dark:bg-slate-900/20 px-2 py-1 rounded-full">Optimal</span>
+        </div>
+        <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Grid Exporting</p>
+        <div class="flex items-baseline gap-1 mt-1">
+        <h3 class="text-2xl font-bold text-slate-900 dark:text-white">
+        {energy ? energy.grid_export_kw : "--"}
+        </h3>
+        <span class="text-slate-400 font-medium">kW</span>
+        </div>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-shadow">
+        <div class="flex justify-between items-start mb-4">
+        <div class="p-2 bg-green-100 dark:bg-green-900/30 text-green-600 rounded-lg">
+        <span class="material-symbols-outlined">battery_full</span>
+        </div>
+        <span class="text-slate-500 text-xs font-bold flex items-center bg-slate-50 dark:bg-slate-900/20 px-2 py-1 rounded-full">Charging</span>
+        </div>
+        <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Battery Reserve</p>
+        <div class="flex items-baseline gap-1 mt-1">
+        <h3 class="text-2xl font-bold text-slate-900 dark:text-white">
+        {energy ? energy.battery_percent : "--"}
+        </h3>
+        <span class="text-slate-400 font-medium">%</span>
+        </div>
+        </div>
+
+        </div>
+        )}
+
+        {activeTab === "historical" && (
+        <div class="space-y-6">
+        <div class="flex flex-wrap justify-between items-end gap-4">
+        <div>
+        <h2 class="text-xl font-bold text-slate-900 dark:text-white">Historical Energy Consumption</h2>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">From month start till now (simulated data).</p>
+        </div>
+        <div class="flex gap-4">
+        <div class="text-right">
+        <p class="text-xs uppercase tracking-wide text-slate-400 font-semibold">Total Consumption</p>
+        <p class="text-lg font-bold text-slate-900 dark:text-white">{totalKwh} kWh</p>
+        </div>
+        <div class="h-10 w-px bg-slate-200 dark:bg-slate-800"></div>
+        <div class="text-right">
+        <p class="text-xs uppercase tracking-wide text-slate-400 font-semibold">Total Bill</p>
+        <p class="text-lg font-bold text-slate-900 dark:text-white">₹{totalCost.toFixed(1)}</p>
+        </div>
+        </div>
+        </div>
+
+        <div class="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
+        <table class="min-w-full text-sm">
+        <thead class="bg-slate-50 dark:bg-slate-800/60">
+        <tr>
+        <th class="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Appliance</th>
+        <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Energy (kWh)</th>
+        <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Bill (₹)</th>
+        </tr>
+        </thead>
+        <tbody>
+        {historicalAppliances.map((a,idx)=>(
+        <tr key={idx} class={idx % 2 === 0 ? "bg-white dark:bg-slate-900" : "bg-slate-50/60 dark:bg-slate-800/40"}>
+        <td class="px-4 py-2 font-medium text-slate-800 dark:text-slate-100">{a.name}</td>
+        <td class="px-4 py-2 text-right text-slate-700 dark:text-slate-200">{a.kwh} kWh</td>
+        <td class="px-4 py-2 text-right text-emerald-600 dark:text-emerald-400 font-semibold">₹{a.cost.toFixed(1)}</td>
+        </tr>
+        ))}
+        </tbody>
+        </table>
+        </div>
+        </div>
+        )}
+
+        {activeTab === "devices" && (
+        <div class="space-y-6">
+        <div class="flex flex-wrap justify-between items-end gap-4">
+        <div>
+        <h2 class="text-xl font-bold text-slate-900 dark:text-white">Connected Devices</h2>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">Live power rating and on/off status (simulated).</p>
+        </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        {deviceList.map((d,idx)=>(
+        <div key={idx} class="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-3 relative">
+        <div class="flex justify-between items-start">
+        <div>
+        <p class="text-sm font-semibold text-slate-900 dark:text-white">{d.name}</p>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Power rating: {d.power}</p>
+        </div>
+        <div class="flex items-center gap-2">
+        <span class={`inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold ${d.status === "ON" ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20" : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-200"}`}>
+        <span class="material-symbols-outlined text-xs mr-1">{d.status === "ON" ? "power" : "power_off"}</span>
+        {d.status}
+        </span>
+        <div class="relative">
+        <button 
+        onClick={() => setOpenMenuId(openMenuId === idx ? null : idx)}
+        class="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+        >
+        <span class="material-symbols-outlined text-lg cursor-pointer">more_vert</span>
+        </button>
+        {openMenuId === idx && (
+        <div class="absolute right-0 top-8 w-48 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-md z-10">
+        <button
+        onClick={() => handleModeChange(idx, "Manual")}
+        class={`w-full text-left px-4 py-2 text-sm rounded-t-lg transition-colors ${getDeviceMode(idx) === "Manual" ? "bg-primary/10 text-primary font-semibold" : "text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"}`}
+        >
+        Manual
+        </button>
+        <button
+        onClick={() => handleModeChange(idx, "Semi-Automatic")}
+        class={`w-full text-left px-4 py-2 text-sm transition-colors ${getDeviceMode(idx) === "Semi-Automatic" ? "bg-primary/10 text-primary font-semibold" : "text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"}`}
+        >
+        Semi-Automatic
+        </button>
+        <button
+        onClick={() => handleModeChange(idx, "Automatic")}
+        class={`w-full text-left px-4 py-2 text-sm rounded-b-lg transition-colors ${getDeviceMode(idx) === "Automatic" ? "bg-primary/10 text-primary font-semibold" : "text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"}`}
+        >
+        Automatic
+        </button>
+        </div>
+        )}
+        </div>
+        </div>
+        </div>
+        <div class="flex flex-col gap-2">
+        <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+        <span>Last updated: just now</span>
+        <span class="inline-flex items-center gap-1"><span class="material-symbols-outlined text-xs text-amber-500">bolt</span>{d.status === "ON" ? "Drawing power" : "Idle"}</span>
+        </div>
+        <div class="pt-2 border-t border-slate-100 dark:border-slate-700">
+        <span class="text-xs text-primary font-semibold">Mode: {getDeviceMode(idx)}</span>
+        </div>
+        </div>
+        </div>
+        ))}
+        </div>
+        </div>
+        )}
+
+        </div>
+        );
+        };
+
+        const AnalyticsPage = () => (
+            <div class="flex-1 space-y-8">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h2 class="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Device Performance</h2>
+                        <p class="text-slate-500 dark:text-slate-400 mt-1">Detailed analytics for your connected appliances.</p>
+                    </div>
+                    <div class="flex gap-3">
+                        <button class="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 transition-colors shadow-sm">
+                            <span class="material-symbols-outlined text-lg">download</span> Export CSV
+                        </button>
+                        <button class="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20">
+                            Add Device
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {[{label: "Total Consumption", val: "452 kWh", change: "12%", up: true, icon: "bolt"},
+                      {label: "Active Devices", val: "12 Units", change: "2%", up: false, icon: "devices"},
+                      {label: "Monthly Cost", val: "₹158.40", change: "5%", up: true, icon: "payments"}].map((stat, i) => (
+                        <div key={i} class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm hover:shadow-md transition-shadow">
+                            <div class="flex justify-between items-start mb-4">
+                                <span class="text-slate-500 dark:text-slate-400 text-sm font-medium uppercase tracking-wider">{stat.label}</span>
+                                <div class="rounded-full bg-primary/10 p-2 text-primary"><span class="material-symbols-outlined">{stat.icon}</span></div>
+                            </div>
+                            <div class="flex items-end gap-3">
+                                <p class="text-3xl font-bold text-slate-900 dark:text-white">{stat.val}</p>
+                                <span class={`${stat.up ? 'text-red-500' : 'text-green-600'} text-sm font-bold flex items-center mb-1`}>
+                                    <span class="material-symbols-outlined text-sm">{stat.up ? 'trending_up' : 'trending_down'}</span>
+                                    {stat.change}
+                                </span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
+                    <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-8">Usage Distribution by Appliance</h3>
+                    <div class="space-y-6">
+                        {[{name: "Air Conditioner (Living Room)", val: "185 kWh", w: "75%"},
+                          {name: "Smart Fridge", val: "92 kWh", w: "45%"},
+                          {name: "Washing Machine", val: "64 kWh", w: "30%"},
+                          {name: "Dishwasher", val: "42 kWh", w: "20%"}].map((app, idx) => (
+                            <div key={idx} class="space-y-2">
+                                <div class="flex justify-between text-sm font-medium">
+                                    <span class="text-slate-700 dark:text-slate-300">{app.name}</span>
+                                    <span class="text-slate-900 dark:text-white">{app.val}</span>
+                                </div>
+                                <div class="h-3 w-full rounded-full bg-slate-100 dark:bg-slate-700">
+                                    <div class="h-full rounded-full bg-primary" style={{width: app.w, opacity: 1 - (idx * 0.2)}}></div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+
+        const ForecastPage = () => {
+
+        const [forecast,setForecast] = React.useState(null);
+
+        React.useEffect(() => {
+            safeFetchJson(`${API_BASE}/energy/forecast`, {
+                predicted_demand_kw: 4.6,
+                predicted_solar_kw: 3.9
+            }).then(setForecast);
+        }, []);
+
+        return (
+
+        <div class="flex-1 space-y-8">
+
+        <div class="flex border-b border-slate-200 dark:border-slate-800 gap-8">
+        <button class="border-b-2 border-primary text-primary pb-3 font-semibold text-sm">Overview</button>
+        <button class="border-b-2 border-transparent text-slate-500 pb-3 font-medium text-sm hover:text-slate-700">Demand Analytics</button>
+        <button class="border-b-2 border-transparent text-slate-500 pb-3 font-medium text-sm hover:text-slate-700">Generation Flow</button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+        <div class="flex flex-col gap-3 rounded-xl p-6 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm">
+        <div class="flex justify-between items-start">
+        <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Predicted Demand</p>
+        <span class="bg-emerald-50 text-emerald-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">+5.2%</span>
+        </div>
+
+        <div class="flex items-baseline gap-2">
+        <p class="text-slate-900 dark:text-white tracking-tight text-3xl font-bold">
+        {forecast ? forecast.predicted_demand_kw : "--"}
+        </p>
+        <p class="text-slate-400 text-sm font-semibold">kW</p>
+        </div>
+
+        <div class="h-1 w-full bg-slate-50 dark:bg-slate-700 rounded-full mt-2">
+        <div class="bg-primary h-1 rounded-full" style={{width: '65%'}}></div>
+        </div>
+        </div>
+
+
+        <div class="flex flex-col gap-3 rounded-xl p-6 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm">
+        <div class="flex justify-between items-start">
+        <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Solar Generation</p>
+        <span class="bg-rose-50 text-rose-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">-2.1%</span>
+        </div>
+
+        <div class="flex items-baseline gap-2">
+        <p class="text-slate-900 dark:text-white tracking-tight text-3xl font-bold">
+        {forecast ? forecast.predicted_solar_kw : "--"}
+        </p>
+        <p class="text-slate-400 text-sm font-semibold">kW</p>
+        </div>
+
+        <div class="h-1 w-full bg-slate-50 dark:bg-slate-700 rounded-full mt-2">
+        <div class="bg-amber-400 h-1 rounded-full" style={{width: '48%'}}></div>
+        </div>
+        </div>
+
+
+        <div class="flex flex-col gap-3 rounded-xl p-6 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm">
+        <div class="flex justify-between items-start">
+        <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Grid Stability</p>
+        <span class="bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Stable</span>
+        </div>
+
+        <div class="flex items-baseline gap-2">
+        <p class="text-slate-900 dark:text-white tracking-tight text-3xl font-bold">99.8</p>
+        <p class="text-slate-400 text-sm font-semibold">%</p>
+        </div>
+
+        <div class="h-1 w-full bg-slate-50 dark:bg-slate-700 rounded-full mt-2">
+        <div class="bg-emerald-400 h-1 rounded-full" style={{width: '99%'}}></div>
+        </div>
+        </div>
+
+        </div>
+
+
+        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden p-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+        <div>
+        <h2 class="text-slate-900 dark:text-white text-xl font-bold">Demand vs. Generation Forecast</h2>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">Next 24 hours comparison based on AI modeling</p>
+        </div>
+
+        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2">
+        <span class="size-2 rounded-full bg-primary"></span>
+        <span class="text-xs font-semibold text-slate-600 dark:text-slate-400">Demand</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+        <span class="size-2 rounded-full bg-amber-400"></span>
+        <span class="text-xs font-semibold text-slate-600 dark:text-slate-400">Generation</span>
+        </div>
+        </div>
+
+        </div>
+
+        <div class="h-[300px] flex items-end justify-between gap-4">
+        {[40,55,75,95,75,55,40,30].map((h,i)=>(
+
+        <div key={i} class="flex-1 flex flex-col justify-end gap-3 h-full group relative">
+
+        <div class="flex items-end gap-1 h-full w-full">
+
+        <div class={`flex-1 bg-primary/20 rounded-t-sm transition-all ${i===3?'bg-primary h-[95%]':'h-['+h+'%] hover:bg-primary/40'}`}></div>
+
+        <div class={`flex-1 bg-amber-400/20 rounded-t-sm transition-all ${i===3?'bg-amber-400 h-[80%]':'h-['+(h-5)+'%] hover:bg-amber-400/40'}`}></div>
+
+        </div>
+
+        <span class="text-[11px] text-slate-400 text-center font-semibold">
+        {(6+i*2).toString().padStart(2,'0')}:00
+        </span>
+
+        </div>
+
+        ))}
+        </div>
+
+        </div>
+
+        </div>
+
+        );
+        };
+
+        const SchedulingPage = () => {
+
+        const [schedule,setSchedule] = React.useState([]);
+        const [scheduleFilter, setScheduleFilter] = React.useState(null);
+        const [aiRec, setAiRec] = React.useState(null);
+        const [aiMessage, setAiMessage] = React.useState("");
+
+        React.useEffect(() => {
+            safeFetchJson(`${API_BASE}/schedule/optimize`, []).then(setSchedule);
+            safeFetchJson(`${API_BASE}/user/profile`, null)
+                .then((p) => { if (p && Array.isArray(p.appliances) && p.appliances.length) setScheduleFilter(p.appliances); });
+            safeFetchJson(`${API_BASE}/ai-recommendation`, null)
+                .then((data) => { if (data && data.alert) setAiRec(data); });
+        }, []);
+
+        const handleApprove = () => {
+        if (!aiRec) return;
+        setAiMessage("");
+        fetch(`${API_BASE}/execute-command`,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({device:aiRec.device,action:aiRec.action})
+        })
+        .then(res=>res.json())
+        .then(data=>{
+        const msg = data && data.message ? data.message : `Command successfully sent to ${aiRec.device}.`;
+        setAiMessage(msg);
+        })
+        .catch(()=>{
+        setAiMessage(`Command successfully sent to ${aiRec.device}.`);
+        });
+        };
+
+        const handleIgnore = () => {
+        setAiRec(null);
+        setAiMessage("Recommendation ignored.");
+        };
+
+        const filteredSchedule = scheduleFilter && scheduleFilter.length
+        ? schedule.filter((item) =>
+            scheduleFilter.some((ua) => {
+                const names = SCHEDULE_USER_TO_BACKEND_NAME[ua];
+                if (!names) return item.appliance === ua;
+                return names.indexOf(item.appliance) >= 0;
+            })
+          )
+        : schedule;
+
+        return (
+
+        <div class="flex-1 space-y-8">
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+        <div class="lg:col-span-8 space-y-8">
+
+        {aiRec && (
+        <div class="rounded-2xl border border-primary/30 bg-primary/5 dark:bg-primary/10 p-5 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div class="flex items-start gap-3">
+        <div class="mt-1 h-9 w-9 rounded-full bg-primary text-white flex items-center justify-center shadow-primary/40 shadow-md">
+        <span class="material-symbols-outlined text-xl">auto_awesome</span>
+        </div>
+        <div>
+        <p class="text-xs font-semibold uppercase tracking-wide text-primary mb-1">AI Energy Optimization Recommendation</p>
+        <p class="text-sm font-semibold text-slate-900 dark:text-white">Device: {aiRec.device}</p>
+        <p class="text-xs text-slate-600 dark:text-slate-300 mt-1">Reason: {aiRec.reason}</p>
+        <p class="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-1">Estimated Savings: {aiRec.estimated_savings}</p>
+        </div>
+        </div>
+        <div class="flex gap-2 justify-end">
+        <button onClick={handleIgnore} class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-200 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800">
+        Ignore
+        </button>
+        <button onClick={handleApprove} class="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold shadow-md shadow-primary/30 hover:bg-primary/90">
+        Approve Action
+        </button>
+        </div>
+        </div>
+        )}
+
+        {aiMessage && (
+        <div class="text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-xl px-3 py-2">
+        {aiMessage}
+        </div>
+        )}
+
+        <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Recommended Timeline</h2>
+        <button class="text-sm font-semibold text-primary hover:underline">Apply All</button>
+        </div>
+
+        <div class="space-y-0 relative before:absolute before:left-[19px] before:top-4 before:bottom-4 before:w-[2px] before:bg-slate-200 dark:before:bg-slate-800">
+
+        {filteredSchedule.map((item,idx)=>(
+
+        <div key={idx} class="flex gap-6 pb-8 relative">
+
+        <div class="z-10 bg-white dark:bg-slate-950 p-1">
+        <div class="size-8 rounded-full flex items-center justify-center border-2 bg-primary/10 text-primary border-primary">
+        <span class="material-symbols-outlined text-[18px]">schedule</span>
+        </div>
+        </div>
+
+        <div class="flex-1 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:shadow-lg transition-shadow">
+
+        <div class="flex justify-between items-start">
+
+        <div>
+        <p class="font-bold text-slate-900 dark:text-white">
+        Run {item.appliance}
+        </p>
+
+        <p class="text-sm text-slate-500">
+        {item.recommended_hour}:00 Recommended
+        </p>
+
+        </div>
+
+        <span class="px-2 py-1 rounded bg-green-100 text-green-700 text-[10px] font-bold uppercase tracking-wider">
+        AI Optimized
+        </span>
+
+        </div>
+
+        <p class="mt-2 text-sm text-slate-600 dark:text-slate-400">
+        Best time based on solar production and tariff pricing.
+        </p>
+
+        </div>
+
+        </div>
+
+        ))}
+
+        </div>
+
+        </div>
+
+
+        <aside class="lg:col-span-4 space-y-6">
+
+        <h3 class="text-lg font-bold text-slate-900 dark:text-white">Smart Rules</h3>
+
+        <div class="space-y-4">
+
+       {[
+{title:"Deep Work Protection",icon:"history_edu",desc:"Block 2h every morning for focused coding.",active:true},
+{title:"Lunch Break Sync",icon:"coffee",desc:"Keep 12:00-13:00 clear across the team.",active:false},
+{title:"Smart Rescheduling",icon:"auto_awesome",desc:"Move canceled slots to next best available.",active:true}
+].map((rule,i)=>(
+<div key={i} class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+
+<div class="flex justify-between items-start mb-3">
+
+<span class={`material-symbols-outlined ${rule.active?'text-primary':'text-slate-400'}`}>
+{rule.icon}
+</span>
+
+<div class={`relative inline-flex h-5 w-9 items-center rounded-full ${rule.active?'bg-primary':'bg-slate-300 dark:bg-slate-700'}`}>
+<span class={`inline-block h-3 w-3 transform rounded-full bg-white transition ${rule.active?'translate-x-4':'translate-x-1'}`}></span>
+</div>
+
+</div>
+
+<h4 class="font-semibold text-slate-900 dark:text-white text-sm">
+{rule.title}
+</h4>
+
+<p class="text-xs text-slate-500 mt-1">
+{rule.desc}
+</p>
+
+</div>
+))}
+
+     
+
+
+        </div>
+
+        </aside>
+
+        </div>
+
+        </div>
+
+        );
+        };
+
+        const TariffsPage = () => {
+            const [selectedState, setSelectedState] = React.useState("Maharashtra");
+
+            const tariffData = {
+                Maharashtra: [
+                    { time: "00", price: 5 },
+                    { time: "06", price: 5.5 },
+                    { time: "09", price: 4.2 },
+                    { time: "12", price: 4 },
+                    { time: "17", price: 5.5 },
+                    { time: "20", price: 7 },
+                    { time: "23", price: 5.5 }
+                ],
+                Delhi: [
+                    { time: "00", price: 6 },
+                    { time: "08", price: 6.5 },
+                    { time: "12", price: 7 },
+                    { time: "18", price: 8 },
+                    { time: "22", price: 6.5 }
+                ],
+                Karnataka: [
+                    { time: "00", price: 5 },
+                    { time: "08", price: 6 },
+                    { time: "12", price: 5.2 },
+                    { time: "18", price: 7.5 },
+                    { time: "22", price: 6 }
+                ],
+                Kerala: [
+                    { time: "00", price: 5 },
+                    { time: "09", price: 5.5 },
+                    { time: "13", price: 5 },
+                    { time: "18", price: 7 },
+                    { time: "22", price: 6 }
+                ],
+                "Tamil Nadu": [
+                    { time: "00", price: 5 },
+                    { time: "10", price: 6.5 },
+                    { time: "14", price: 5 },
+                    { time: "20", price: 7.5 },
+                    { time: "23", price: 6 }
+                ],
+                Gujarat: [
+                    { time: "00", price: 5 },
+                    { time: "09", price: 4.5 },
+                    { time: "13", price: 4.2 },
+                    { time: "18", price: 7 },
+                    { time: "22", price: 5.8 }
+                ],
+                "Uttar Pradesh": [
+                    { time: "00", price: 5 },
+                    { time: "09", price: 7 },
+                    { time: "14", price: 6 },
+                    { time: "19", price: 7.5 },
+                    { time: "22", price: 6 }
+                ],
+                Bihar: [
+                    { time: "00", price: 5 },
+                    { time: "10", price: 5.5 },
+                    { time: "17", price: 7.5 },
+                    { time: "23", price: 5.5 }
+                ],
+                "Andhra Pradesh": [
+                    { time: "00", price: 5 },
+                    { time: "11", price: 7 },
+                    { time: "15", price: 6 },
+                    { time: "20", price: 7.2 },
+                    { time: "23", price: 5.8 }
+                ],
+                Others: [
+                    { time: "00", price: 6 },
+                    { time: "24", price: 6 }
+                ]
+            };
+
+            const currentData = tariffData[selectedState];
+            const avgPrice = (currentData.reduce((sum, d) => sum + d.price, 0) / currentData.length).toFixed(2);
+            const maxPrice = Math.max(...currentData.map(d => d.price));
+
+            return (
+                <div class="flex-1 space-y-8">
+                    <div class="flex flex-wrap items-center justify-between gap-4">
+                        <div>
+                            <h2 class="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Time-of-Day Pricing</h2>
+                            <p class="text-slate-500 font-medium mt-1">State: <span class="text-primary font-bold">{selectedState}</span></p>
+                        </div>
+                        <select
+                            value={selectedState}
+                            onChange={(e) => setSelectedState(e.target.value)}
+                            class="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-primary focus:border-transparent shadow-sm"
+                        >
+                            {Object.keys(tariffData).map(state => (
+                                <option key={state} value={state}>{state}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="lg:col-span-2 p-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+                            <div class="flex justify-between items-start mb-6">
+                                <div>
+                                    <p class="text-sm font-medium text-slate-500 uppercase tracking-wide">Price Curve</p>
+                                    <h3 class="text-4xl font-bold text-slate-900 dark:text-white mt-1">₹{avgPrice}<span class="text-sm font-normal text-slate-400 ml-1">/kWh</span></h3>
+                                </div>
+                                <div class="px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-full text-sm font-bold">
+                                    {currentData.length} slots
+                                </div>
+                            </div>
+
+                            <div class="flex items-end justify-between gap-3 h-64 mb-6 w-full border border-red-200">
+                                {currentData.map((point, i) => (
+                                    <div key={i} class="flex flex-col items-center flex-1 justify-end">
+                                        <div
+                                            class={`w-full rounded-t-md transition-all cursor-pointer ${
+                                                point.price >= maxPrice * 0.9 ? "bg-red-500" :
+                                                point.price <= 4.5 ? "bg-green-500" :
+                                                "bg-primary"
+                                            }`}
+                                            style={{
+                                                height: point.price * 30 + "px",
+                                                minHeight: "20px"
+                                            }}
+                                            title={`₹${point.price}/kWh`}
+                                        ></div>
+                                        <span class="text-[11px] text-slate-500 dark:text-slate-400 mt-2 font-semibold">{point.time}:00</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div class="flex gap-4 text-xs">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-3 h-3 rounded bg-red-500"></div>
+                                    <span class="text-slate-600 dark:text-slate-400">Peak</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-3 h-3 rounded bg-primary"></div>
+                                    <span class="text-slate-600 dark:text-slate-400">Normal</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-3 h-3 rounded bg-green-500"></div>
+                                    <span class="text-slate-600 dark:text-slate-400">Off-Peak</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-6">
+                            <div class="p-6 rounded-xl bg-primary text-white shadow-xl shadow-primary/20">
+                                <h4 class="text-sm font-medium opacity-90 uppercase tracking-wider mb-2">Peak Rate</h4>
+                                <p class="text-2xl font-bold">₹{maxPrice.toFixed(1)}/kWh</p>
+                            </div>
+                            <div class="p-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+                                <h4 class="text-sm font-bold text-slate-900 dark:text-white mb-4">Pricing Details</h4>
+                                <div class="space-y-3 text-sm">
+                                    {currentData.map((point, i) => (
+                                        <div key={i} class="flex justify-between items-center">
+                                            <span class="text-slate-600 dark:text-slate-400">{point.time}:00</span>
+                                            <span class="font-semibold text-slate-900 dark:text-white">₹{point.price}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const AssistantPage = () => {
+            const [messages, setMessages] = useState([]);
+            const [msg, setMsg] = useState("");
+            const [isListening, setIsListening] = useState(false);
+            const [isSpeaking, setIsSpeaking] = useState(false);
+            const [language, setLanguage] = useState("en");
+            const [userAppliances, setUserAppliances] = useState([]);
+            const [languages, setLanguages] = useState([{ code: "en", name: "English" }, { code: "hi", name: "Hindi" }, { code: "bn", name: "Bengali" }, { code: "mr", name: "Marathi" }, { code: "te", name: "Telugu" }, { code: "ta", name: "Tamil" }, { code: "gu", name: "Gujarati" }, { code: "ur", name: "Urdu" }, { code: "kn", name: "Kannada" }, { code: "or", name: "Odia" }, { code: "pa", name: "Punjabi" }]);
+            const recognitionRef = React.useRef(null);
+
+            React.useEffect(() => {
+                safeFetchJson(`${API_BASE}/assistant/languages`, null)
+                    .then((data) => { if (data && data.languages && data.languages.length) setLanguages(data.languages); });
+            }, []);
+
+            React.useEffect(() => {
+                safeFetchJson(`${API_BASE}/user/profile`, null).then((p) => {
+                    if (p && p.language) setLanguage(p.language);
+                    if (p && Array.isArray(p.appliances)) setUserAppliances(p.appliances);
+                });
+            }, []);
+
+            const langToSpeechCode = { en: "en-IN", hi: "hi-IN", bn: "bn-IN", mr: "mr-IN", te: "te-IN", ta: "ta-IN", gu: "gu-IN", ur: "ur-IN", kn: "kn-IN", or: "or-IN", pa: "pa-IN" };
+
+            const speak = (text) => {
+                setIsSpeaking(true);
+                if (typeof speechSynthesis === "undefined") {
+                    setIsSpeaking(false);
+                    return;
+                }
+                try {
+                    speechSynthesis.cancel();
+                    const speech = new SpeechSynthesisUtterance(text);
+                    speech.rate = 0.95;
+                    speech.pitch = 1;
+
+                    // Pick best available voice for selected language, fall back gracefully
+                    let targetLang = langToSpeechCode[language] || "en-IN";
+                    try {
+                        const voices = speechSynthesis.getVoices ? speechSynthesis.getVoices() : [];
+                        if (voices && voices.length) {
+                            const exact = voices.find(v => v.lang === targetLang);
+                            const baseCode = targetLang.split("-")[0];
+                            const base = voices.find(v => v.lang && v.lang.startsWith(baseCode));
+                            const english = voices.find(v => v.lang && v.lang.toLowerCase().startsWith("en"));
+                            const chosen = exact || base || english || voices[0];
+                            if (chosen && chosen.lang) {
+                                targetLang = chosen.lang;
+                            }
+                        }
+                    } catch (_) {}
+
+                    speech.lang = targetLang;
+                    speech.onend = () => setIsSpeaking(false);
+                    speech.onerror = () => setIsSpeaking(false);
+                    speechSynthesis.speak(speech);
+                } catch (e) {
+                    console.error("TTS error:", e);
+                    setIsSpeaking(false);
+                }
+            };
+
+            const askAssistant = async (userText) => {
+                const text = (userText || msg || "").trim();
+                if (!text) return;
+                setMsg("");
+                setMessages((prev) => [...prev, { role: "user", text: text }]);
+                try {
+                    const res = await fetch(`${API_BASE}/assistant/query`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ message: text, language: language, appliances: userAppliances })
+                    });
+                    const data = await res.json();
+                    const responseText = data.response || "Sorry, I could not process that.";
+                    setMessages((prev) => [...prev, { role: "assistant", text: responseText }]);
+                    speak(responseText);
+                } catch (err) {
+                    console.error("Assistant error:", err);
+                    const errMsg = "Sorry, I could not connect. Please try again.";
+                    setMessages((prev) => [...prev, { role: "assistant", text: errMsg }]);
+                    speak(errMsg);
+                }
+            };
+
+            const toggleMic = () => {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (!SpeechRecognition) {
+                    alert("Voice input is not supported. Try Chrome. You can type your question instead.");
+                    return;
+                }
+                if (isListening && recognitionRef.current) {
+                    try { recognitionRef.current.stop(); } catch (_) {}
+                    setIsListening(false);
+                    recognitionRef.current = null;
+                    return;
+                }
+                try {
+                    const recognition = new SpeechRecognition();
+                    recognitionRef.current = recognition;
+                    recognition.continuous = false;
+                    recognition.interimResults = false;
+                    recognition.lang = langToSpeechCode[language] || "en-IN";
+                    recognition.onresult = (e) => {
+                        const transcript = (e.results[0] && e.results[0][0]) ? e.results[0][0].transcript : "";
+                        if (transcript) askAssistant(transcript);
+                    };
+                    recognition.onend = () => { setIsListening(false); recognitionRef.current = null; };
+                    recognition.onerror = () => { setIsListening(false); recognitionRef.current = null; };
+                    recognition.start();
+                    setIsListening(true);
+                } catch (err) {
+                    console.error("Speech recognition error:", err);
+                    setIsListening(false);
+                    recognitionRef.current = null;
+                }
+            };
+
+            return (
+                <div class="flex-1 flex flex-col bg-slate-50 dark:bg-slate-950 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 h-[calc(100vh-160px)]">
+                    <div class="flex-1 overflow-y-auto p-6 space-y-6">
+                        <div class="max-w-3xl mx-auto text-center mb-8">
+                            <h1 class="text-slate-900 dark:text-white text-3xl font-extrabold tracking-tight mb-2">Voice Assistant</h1>
+                            <p class="text-slate-500 mb-4">Choose your language, then type or speak your question. Responses will be in the selected language.</p>
+                            <div class="flex flex-wrap justify-center gap-2">
+                                <label class="text-sm font-medium text-slate-600 dark:text-slate-400">Language:</label>
+                                <select
+                                    value={language}
+                                    onChange={(e) => setLanguage(e.target.value)}
+                                    class="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-white px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-primary"
+                                >
+                                    {languages.map(function(l) { return <option key={l.code} value={l.code}>{l.name}</option>; })}
+                                </select>
+                            </div>
+                        </div>
+                        {messages.length === 0 && (
+                            <div class="flex items-start gap-4 max-w-2xl">
+                                <div class="size-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 border border-primary/20"><span class="material-symbols-outlined text-primary">smart_toy</span></div>
+                                <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl rounded-tl-none border border-slate-200 dark:border-slate-800 shadow-sm text-slate-800 dark:text-slate-200">
+                                    Ask in your language: (1) When will solar generation peak today? (2) When should I run the washing machine? (3) How much electricity cost can I save today?
+                                </div>
+                            </div>
+                        )}
+                        {messages.map((m, i) => (
+                            <div key={i} class={"flex items-start gap-4 max-w-2xl" + (m.role === "user" ? " ml-auto flex-row-reverse" : "")}>
+                                {m.role === "assistant" ? (
+                                    <div class="size-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 border border-primary/20"><span class="material-symbols-outlined text-primary">smart_toy</span></div>
+                                ) : null}
+                                {m.role === "user" ? (
+                                    <div class="size-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-slate-600">person</span></div>
+                                ) : null}
+                                <div class={"p-4 rounded-2xl shadow-sm " + (m.role === "user" ? "bg-primary text-white rounded-tr-none" : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-tl-none text-slate-800 dark:text-slate-200")}>
+                                    {m.text}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <div class="p-6 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
+                        <div class="max-w-3xl mx-auto flex flex-col items-center gap-4">
+                            <p class="text-sm text-slate-500">{isListening ? "Listening... Speak now" : isSpeaking ? "Speaking..." : "Tap microphone or type to ask (response in selected language)"}</p>
+                            <div class="flex items-center gap-3 flex-wrap justify-center">
+                                <button
+                                    onClick={toggleMic}
+                                    class={"flex size-20 items-center justify-center rounded-full shadow-xl transition-all " + (isListening ? "bg-red-500 text-white animate-pulse scale-110" : "bg-primary text-white hover:scale-105 active:scale-95")}
+                                    title={isListening ? "Stop listening" : "Start voice input"}
+                                >
+                                    <span class="material-symbols-outlined text-4xl">mic</span>
+                                </button>
+                                <div class="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 rounded-full pl-4 pr-2 py-2 border border-slate-200 dark:border-slate-700">
+                                    <input
+                                        value={msg}
+                                        onChange={(e) => setMsg(e.target.value)}
+                                        type="text"
+                                        placeholder="Type your question..."
+                                        class="w-48 sm:w-64 bg-transparent border-none focus:ring-0 text-slate-800 dark:text-white placeholder-slate-400 text-sm"
+                                        onKeyDown={(e) => { if (e.key === "Enter") askAssistant(msg); }}
+                                    />
+                                    <button onClick={() => askAssistant(msg)} class="p-2 rounded-full bg-primary text-white hover:bg-primary/90">
+                                        <span class="material-symbols-outlined text-lg">send</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const AppLayout = () => {
+            const location = useLocation();
+            const isLogin = location.pathname === "/login";
+            const isSetup = location.pathname === "/setup";
+            const fullBleed = isLogin || isSetup;
+            return (
+                <div class="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col">
+                    {!fullBleed && <Header />}
+                    <div class={`flex-1 ${fullBleed ? "" : "flex flex-col lg:flex-row max-w-[1600px] mx-auto w-full p-4 lg:p-8 gap-8"}`}>
+                        {!fullBleed && <Sidebar />}
+                        <main class={isLogin ? "flex-1" : "flex-1 overflow-y-auto no-scrollbar"}>
+                            <Routes>
+                                <Route path="/login" element={<LoginPage />} />
+                                <Route path="/setup" element={<ProtectedRoute element={<OnboardingPage />} />} />
+                                <Route path="/" element={<ProtectedRoute element={<DashboardOverview />} />} />
+                                <Route path="/analytics" element={<ProtectedRoute element={<AnalyticsPage />} />} />
+                                <Route path="/forecast" element={<ProtectedRoute element={<ForecastPage />} />} />
+                                <Route path="/scheduling" element={<ProtectedRoute element={<SchedulingPage />} />} />
+                                <Route path="/tariffs" element={<ProtectedRoute element={<TariffsPage />} />} />
+                                <Route path="/assistant" element={<ProtectedRoute element={<AssistantPage />} />} />
+                                <Route path="/onboarding" element={<ProtectedRoute element={<OnboardingGuide />} />} />
+                                <Route path="/settings" element={<ProtectedRoute element={<div className="p-10 text-center text-slate-500">Settings Module Placeholder</div>} />} />
+                                <Route path="*" element={<Navigate to="/" replace />} />
+                            </Routes>
+                        </main>
+                    </div>
+                    {!fullBleed && (
+                        <div class="fixed bottom-6 right-6 lg:hidden">
+                            <button class="h-14 w-14 rounded-full bg-primary text-white shadow-xl flex items-center justify-center">
+                                <span class="material-symbols-outlined text-3xl">add</span>
+                            </button>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const App = () => (
+            <MemoryRouter>
+                <ProfileBootstrap>
+                    <AppLayout />
+                </ProfileBootstrap>
+            </MemoryRouter>
+        );
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+{
+  "state": "Assam",
+  "language": "en",
+  "house": {
+    "type": "Independent",
+    "rooms": "3",
+    "people": "5"
+  },
+  "appliances": [
+    "AC",
+    "Fan",
+    "Light",
+    "Washing Machine"
+  ],
+  "applianceDetails": [
+    {
+      "name": "AC",
+      "count": 1,
+      "hours": 2.0
+    },
+    {
+      "name": "Fan",
+      "count": 1,
+      "hours": 8.0
+    },
+    {
+      "name": "Light",
+      "count": 1,
+      "hours": 2.0
+    },
+    {
+      "name": "Washing Machine",
+      "count": 1,
+      "hours": 1.0
+    }
+  ],
+  "bill": "5500",
+  "solar": {
+    "hasSolar": true,
+    "capacity": "5",
+    "netMetering": true
+  },
+  "usagePattern": "Morning",
+  "goal": "Reduce Bill"
+}

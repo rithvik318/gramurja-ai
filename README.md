@@ -4,7 +4,8 @@ Backend system for intelligent household energy management.
 Focuses on **predicting demand, optimizing appliance usage, and integrating solar availability** using lightweight ML + rule-based scheduling.
 
 ---
-
+Here's a demo video on how it works 
+https://drive.google.com/file/d/1cZCKmNuRsAuWd_IpOPWChsjohZtrRUTR/view?usp=sharing
 ## What it does
 
 The system models a household’s daily energy usage and answers:
